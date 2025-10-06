@@ -6,18 +6,22 @@ from tkinter import messagebox
 DB_FILE = "users.db"  # Κοινή χρήση σταθεράς αρχείου
 
 def connect_db():
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect("appointments.db")
     cursor = conn.cursor()
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            username_db TEXT PRIMARY KEY,
-            password_db TEXT NOT NULL,
-            name_db TEXT NOT NULL,
-            phone_number_db TEXT NOT NULL
+        CREATE TABLE IF NOT EXISTS appointments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            name TEXT NOT NULL,
+            date TEXT NOT NULL,
+            time TEXT NOT NULL,
+            service TEXT NOT NULL,
+            phone_number TEXT NOT NULL
         )
     """)
     conn.commit()
     conn.close()
+
 
 def verify_user(username, password):
     conn = sqlite3.connect("users.db")
@@ -77,3 +81,22 @@ def open_register_window(root):
             messagebox.showerror("Σφάλμα", str(e))
 
     tk.Button(register_window, text="Εγγραφή", command=register_user).pack(pady=10)
+
+
+
+def get_user_profile(username):
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT name_db, phone_number_db FROM users WHERE username_db=?", (username,))
+    result = cursor.fetchone()
+    conn.close()
+    return result  
+
+
+def get_name_by_username(username):  #ΕΥΡΕΣΗ name ΑΠΟ username
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT name_db FROM users WHERE username_db=?", (username,))
+    result = cursor.fetchone()
+    conn.close()
+    return result[0] if result else None

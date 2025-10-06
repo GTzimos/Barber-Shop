@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import messagebox
-from users import verify_user
 from users import verify_user, open_register_window
 from appointments_gui import AppointmentWindow
 from barber_menu import open_barber_menu
@@ -24,26 +23,17 @@ def open_login_window(on_success):
 
         user = verify_user(username, password)
         if user:
-            messagebox.showinfo("Επιτυχία", f"Καλώς ήρθες {user[2]}!")
-            
-            login_window.destroy()  # Κλείνουμε το login παράθυρο
+            messagebox.showinfo("Επιτυχία", f"Καλώς ήρθες {username}!")
 
-            if username == "admin":
-                open_barber_menu()
-            else:
-                AppointmentWindow(username)
-        if verify_user(username, password):
-            messagebox.showinfo("Success", "Επιτυχής σύνδεση!")
-            login_window.destroy()
-            on_success(username)  # καλούμε callback με το username
+            def proceed():
+                login_window.destroy()
+                on_success(username)
+
+            login_window.after(100, proceed)
         else:
-            messagebox.showerror("Error", "Λάθος στοιχεία!")
+            messagebox.showerror("Σφάλμα", "Λάθος στοιχεία!")
 
-    login_button = tk.Button(login_window, text="Login", command=handle_login)
-    login_button.pack(pady=10)
-
-    register_button = tk.Button(login_window, text="Εγγραφή", command=lambda: open_register_window(login_window))
-    register_button.pack(pady=10)
-
+    tk.Button(login_window, text="Login", command=handle_login).pack(pady=10)
+    tk.Button(login_window, text="Εγγραφή", command=lambda: open_register_window(login_window)).pack(pady=10)
 
     login_window.mainloop()
