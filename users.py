@@ -1,100 +1,147 @@
-import sqlite3
+from __future__ import annotations
+
 import re
-import tkinter as tk
-from tkinter import messagebox
+import sqlite3
 
-DB_FILE = "users.db"  # Κοινή χρήση σταθεράς αρχείου
+from PyQt6.QtWidgets import (
+    QDialog,
+    QFormLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+)
 
-def connect_db():
-    conn = sqlite3.connect("appointments.db")
+from qt_ui import center_window, make_card_layout, setup_frameless
+
+DB_FILE = "users.db"
+
+
+def connect_db() -> None:
+    conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS appointments (
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL,
-            name TEXT NOT NULL,
-            date TEXT NOT NULL,
-            time TEXT NOT NULL,
-            service TEXT NOT NULL,
-            phone_number TEXT NOT NULL
+            username_db TEXT UNIQUE NOT NULL,
+            password_db TEXT NOT NULL,
+            name_db TEXT NOT NULL,
+            phone_number_db TEXT NOT NULL
         )
-    """)
+        """
+    )
     conn.commit()
     conn.close()
 
 
-def verify_user(username, password):
-    conn = sqlite3.connect("users.db")
+def verify_user(username: str, password: str):
+    conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE username_db=? AND password_db=?", (username, password))
     user = cursor.fetchone()
     conn.close()
-    return user  # Πρέπει να επιστρέφει τα στοιχεία χρήστη ή None αν δεν βρεθεί
+    return user
 
 
-def add_user(username, password, name, phone_number):
+def add_user(username: str, password: str, name: str, phone_number: str) -> None:
     if not re.match(r"^\d{10}$", phone_number):
         raise ValueError("Το τηλέφωνο πρέπει να έχει 10 ψηφία.")
 
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     try:
-        cursor.execute("INSERT INTO users (username_db, password_db, name_db, phone_number_db) VALUES (?, ?, ?, ?)",
-                       (username, password, name, phone_number))
+        cursor.execute(
+            "INSERT INTO users (username_db, password_db, name_db, phone_number_db) VALUES (?, ?, ?, ?)",
+            (username, password, name, phone_number),
+        )
         conn.commit()
-    except sqlite3.IntegrityError:
-        raise ValueError("Το όνομα χρήστη υπάρχει ήδη.")
+    except sqlite3.IntegrityError as exc:
+        raise ValueError("Το όνομα χρήστη υπάρχει ήδη.") from exc
     finally:
         conn.close()
 
-def open_register_window(root):
-    register_window = tk.Toplevel(root)
-    register_window.title("Εγγραφή Χρήστη")
-    
-    tk.Label(register_window, text="Username:").pack(pady=10)
-    entry_username = tk.Entry(register_window)
-    entry_username.pack()
-    
-    tk.Label(register_window, text="Password:").pack(pady=10)
-    entry_password = tk.Entry(register_window, show="*")
-    entry_password.pack()
-    
-    tk.Label(register_window, text="Name:").pack(pady=10)
-    entry_name = tk.Entry(register_window)
-    entry_name.pack()
-    
-    tk.Label(register_window, text="Phone Number:").pack(pady=10)
-    entry_phone_number = tk.Entry(register_window)
-    entry_phone_number.pack()
 
-    def register_user():
-        username = entry_username.get()
-        password = entry_password.get()
-        name = entry_name.get()
-        phone_number = entry_phone_number.get()
+class RegisterDialog(QDialog):
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        center_window(self, 520, 440)
+        content = setup_frameless(self, "Εγγραφή Χρήστη")
+        card = make_card_layout(content)
+
+        heading = QLabel("Νέος Λογαριασμός")
+        heading.setObjectName("Heading")
+        card.addWidget(heading)
+
+        subtitle = QLabel("Συμπλήρωσε τα στοιχεία σου για γρήγορη κράτηση.")
+        subtitle.setObjectName("Subtle")
+        card.addWidget(subtitle)
+
+        form = QFormLayout()
+        form.setVerticalSpacing(8)
+
+        self.username_input = QLineEdit()
+        self.password_input = QLineEdit()
+        self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.name_input = QLineEdit()
+        self.phone_input = QLineEdit()
+
+        form.addRow("Username", self.username_input)
+        form.addRow("Password", self.password_input)
+        form.addRow("Full Name", self.name_input)
+        form.addRow("Phone Number", self.phone_input)
+        card.addLayout(form)
+
+        actions = QVBoxLayout()
+        submit = QPushButton("Ολοκλήρωση Εγγραφής")
+        submit.setObjectName("Primary")
+        submit.clicked.connect(self._register)
+
+        cancel = QPushButton("Ακύρωση")
+        cancel.setObjectName("Secondary")
+        cancel.clicked.connect(self.reject)
+
+        actions.addWidget(submit)
+        actions.addWidget(cancel)
+        card.addLayout(actions)
+
+        self.username_input.setFocus()
+
+    def _register(self) -> None:
+        username = self.username_input.text().strip()
+        password = self.password_input.text().strip()
+        name = self.name_input.text().strip()
+        phone_number = self.phone_input.text().strip()
+
+        if not all([username, password, name, phone_number]):
+            QMessageBox.warning(self, "Προσοχή", "Συμπλήρωσε όλα τα πεδία.")
+            return
 
         try:
             add_user(username, password, name, phone_number)
-            messagebox.showinfo("Επιτυχία", "Ο χρήστης εγγράφηκε επιτυχώς!")
-            register_window.destroy()
-        except ValueError as e:
-            messagebox.showerror("Σφάλμα", str(e))
-
-    tk.Button(register_window, text="Εγγραφή", command=register_user).pack(pady=10)
+            QMessageBox.information(self, "Επιτυχία", "Ο χρήστης εγγράφηκε επιτυχώς!")
+            self.accept()
+        except ValueError as error:
+            QMessageBox.critical(self, "Σφάλμα", str(error))
 
 
+def open_register_window(parent=None) -> int:
+    dialog = RegisterDialog(parent)
+    return dialog.exec()
 
-def get_user_profile(username):
-    conn = sqlite3.connect("users.db")
+
+def get_user_profile(username: str):
+    conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT name_db, phone_number_db FROM users WHERE username_db=?", (username,))
     result = cursor.fetchone()
     conn.close()
-    return result  
+    return result
 
 
-def get_name_by_username(username):  #ΕΥΡΕΣΗ name ΑΠΟ username
-    conn = sqlite3.connect("users.db")
+def get_name_by_username(username: str):
+    conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT name_db FROM users WHERE username_db=?", (username,))
     result = cursor.fetchone()

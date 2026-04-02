@@ -1,146 +1,222 @@
-import tkinter as tk
+from __future__ import annotations
+
+from typing import Callable
+
+from PyQt6.QtWidgets import (
+    QFormLayout,
+    QLabel,
+    QListWidget,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+    QDialog,
+)
+
+from appointments import delete_appointment, get_all_appointments, get_appointments_for_tomorrow
+from qt_ui import center_window, make_card_layout, setup_frameless
 from services import load_services, save_services
-from appointments import get_all_appointments, delete_appointment,get_appointments_for_tomorrow
-from users import get_user_profile  
-from tkinter import messagebox
+from users import get_user_profile
 
 
-def open_barber_menu():
-    root = tk.Tk()
-    root.title("Μενού Κουρέα")
+class AppointmentsDialog(QDialog):
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        center_window(self, 650, 520)
+        content = setup_frameless(self, "Όλα τα ραντεβού")
+        card = make_card_layout(content)
 
-    tk.Label(root, text="Είσαι συνδεδεμένος ως Κουρέας", font=("Arial", 16)).pack(pady=20)
+        self.appointments = get_all_appointments()
 
-    # Προσθήκη λειτουργιών κουρέα (π.χ. Προβολή όλων των ραντεβού)
-    tk.Button(root, text="Προβολή όλων των ραντεβού", command=show_appointments).pack(pady=10)
-    
-    tk.Button(root, text="Διαχείριση Τιμών", command=manage_prices).pack(pady=10)
-    
-    tk.Button(root, text="Υπενθυμίσεις Αύριο", command=show_reminders).pack(pady=5)
+        title = QLabel("Ραντεβού")
+        title.setObjectName("Heading")
+        card.addWidget(title)
 
-    # Κουμπί Logout
-    def handle_logout():
-        from logout import logout
-        logout(root) # Καλεί τη συνάρτηση με το root του παραθύρου
+        self.list_widget = QListWidget()
+        for appointment in self.appointments:
+            self.list_widget.addItem(f"{appointment[1]} - {appointment[2]} - {appointment[3]} - {appointment[4]}")
+        card.addWidget(self.list_widget)
 
-    tk.Button(root, text="Logout", command=handle_logout).pack(pady=20)
-  
-    root.mainloop()
+        cancel_btn = QPushButton("Ακύρωση επιλεγμένου")
+        cancel_btn.setObjectName("Danger")
+        cancel_btn.clicked.connect(self._cancel_selected)
 
-def show_appointments():
-    window = tk.Toplevel()
-    window.title("Όλα τα ραντεβού")
-    window.geometry("400x400")
+        profile_btn = QPushButton("Προβολή Προφίλ Πελάτη")
+        profile_btn.setObjectName("Secondary")
+        profile_btn.clicked.connect(self._view_profile)
 
-    tk.Label(window, text="Ραντεβού", font=("Arial", 14)).pack(pady=10)
+        card.addWidget(cancel_btn)
+        card.addWidget(profile_btn)
 
-    listbox = tk.Listbox(window, width=50)
-    listbox.pack(pady=10)
+    def _selected_index(self) -> int:
+        index = self.list_widget.currentRow()
+        if index < 0:
+            QMessageBox.warning(self, "Προσοχή", "Δεν επιλέχθηκε ραντεβού.")
+            return -1
+        return index
 
-    appointments = get_all_appointments()
-    for app in appointments:
-        display = f"{app[1]} - {app[2]} - {app[3]} - {app[4]}"  # username - date - time - service
-        listbox.insert(tk.END, display)
-
-    def cancel_selected():
-        selected = listbox.curselection()
-        if not selected:
-            tk.messagebox.showwarning("Προσοχή", "Δεν επιλέχθηκε ραντεβού.")
+    def _cancel_selected(self) -> None:
+        index = self._selected_index()
+        if index < 0:
             return
-        confirm = tk.messagebox.askyesno("Επιβεβαίωση", "Θέλεις σίγουρα να ακυρώσεις το ραντεβού;")
-        if confirm:
-            index = selected[0]
-            appointment = appointments[index]
-            delete_appointment(appointment[0])  # Χρήση ID αν υπάρχει
-            listbox.delete(index)
-            tk.messagebox.showinfo("Επιτυχία", "Το ραντεβού ακυρώθηκε.")
 
-    def view_profile():
-        selected = listbox.curselection()
-        if not selected:
-            tk.messagebox.showwarning("Προσοχή", "Δεν επιλέχθηκε ραντεβού.")
+        confirm = QMessageBox.question(self, "Επιβεβαίωση", "Θέλεις σίγουρα να ακυρώσεις το ραντεβού;")
+        if confirm != QMessageBox.StandardButton.Yes:
             return
-        index = selected[0]
-        username = appointments[index][1]
+
+        delete_appointment(self.appointments[index][0])
+        self.list_widget.takeItem(index)
+        self.appointments.pop(index)
+        QMessageBox.information(self, "Επιτυχία", "Το ραντεβού ακυρώθηκε.")
+
+    def _view_profile(self) -> None:
+        index = self._selected_index()
+        if index < 0:
+            return
+
+        username = self.appointments[index][1]
         profile = get_user_profile(username)
-        if profile:
-            name, phone = profile
-            info = f"Όνομα: {name}\nΤηλέφωνο: {phone}\nUsername: {username}"
-            tk.messagebox.showinfo("Προφίλ Πελάτη", info)
-        else:
-            tk.messagebox.showerror("Σφάλμα", "Δεν βρέθηκαν στοιχεία για αυτόν τον πελάτη.")
+        if not profile:
+            QMessageBox.critical(self, "Σφάλμα", "Δεν βρέθηκαν στοιχεία για αυτόν τον πελάτη.")
+            return
 
-    tk.Button(window, text="Ακύρωση επιλεγμένου", command=cancel_selected).pack(pady=5)
-    tk.Button(window, text="Προβολή Προφίλ Πελάτη", command=view_profile).pack(pady=5)
-    
+        name, phone = profile
+        QMessageBox.information(self, "Προφίλ Πελάτη", f"Όνομα: {name}\nΤηλέφωνο: {phone}\nUsername: {username}")
 
-def manage_prices():
-    window = tk.Toplevel()
-    window.title("Διαχείριση Τιμών")
 
-    services = load_services()
-    entries = {}
+class ManagePricesDialog(QDialog):
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        center_window(self, 500, 440)
+        content = setup_frameless(self, "Διαχείριση Τιμών")
+        card = make_card_layout(content)
 
-    for i, (name, price) in enumerate(services.items()):
-        tk.Label(window, text=name).grid(row=i, column=0, padx=10, pady=5)
-        e = tk.Entry(window)
-        e.insert(0, str(price))
-        e.grid(row=i, column=1)
-        entries[name] = e
+        title = QLabel("Διαχείριση Τιμών")
+        title.setObjectName("Heading")
+        card.addWidget(title)
 
-    def save():
+        self.entries = {}
+        form = QFormLayout()
+        services = load_services()
+
+        from PyQt6.QtWidgets import QLineEdit
+
+        for service_name, price in services.items():
+            field = QLineEdit(str(price))
+            form.addRow(service_name, field)
+            self.entries[service_name] = field
+
+        card.addLayout(form)
+
+        save_button = QPushButton("Αποθήκευση")
+        save_button.setObjectName("Primary")
+        save_button.clicked.connect(self._save)
+        card.addWidget(save_button)
+
+    def _save(self) -> None:
         try:
-            updated = {name: float(entry.get()) for name, entry in entries.items()}
+            updated = {name: float(field.text()) for name, field in self.entries.items()}
             save_services(updated)
-            tk.messagebox.showinfo("Επιτυχία", "Οι τιμές αποθηκεύτηκαν.")
-            window.destroy()
+            QMessageBox.information(self, "Επιτυχία", "Οι τιμές αποθηκεύτηκαν.")
+            self.accept()
         except ValueError:
-            tk.messagebox.showerror("Σφάλμα", "Μη έγκυρη τιμή.")
+            QMessageBox.critical(self, "Σφάλμα", "Μη έγκυρη τιμή.")
 
-    tk.Button(window, text="Αποθήκευση", command=save).grid(row=len(services), column=0, columnspan=2, pady=10)
-    
-    
 
-def show_reminders():
-    window = tk.Toplevel()
-    window.title("Υπενθυμίσεις Ραντεβού για Αύριο")
-    window.geometry("500x400")
+class RemindersDialog(QDialog):
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        center_window(self, 680, 500)
+        content = setup_frameless(self, "Υπενθυμίσεις Ραντεβού")
+        card = make_card_layout(content)
 
-    tk.Label(window, text="Ραντεβού για Αύριο", font=("Arial", 14)).pack(pady=10)
+        title = QLabel("Ραντεβού για Αύριο")
+        title.setObjectName("Heading")
+        card.addWidget(title)
 
-    appointments = get_appointments_for_tomorrow()
+        self.appointment_data = []
+        self.list_widget = QListWidget()
+        card.addWidget(self.list_widget)
 
-    if not appointments:
-        tk.Label(window, text="Δεν υπάρχουν ραντεβού για αύριο.").pack(pady=20)
-        return
-
-    listbox = tk.Listbox(window, width=60)
-    listbox.pack(pady=10)
-
-    appointment_data = []
-
-    for i, (username, time) in enumerate(appointments):
-        profile = get_user_profile(username)
-        if profile:
-            name, phone = profile
-            display = f"{name} ({username}) - {time} - Τηλ: {phone}"
-            appointment_data.append((username, name, phone, time))
+        appointments = get_appointments_for_tomorrow()
+        if not appointments:
+            empty = QLabel("Δεν υπάρχουν ραντεβού για αύριο.")
+            empty.setObjectName("Subtle")
+            card.addWidget(empty)
         else:
-            display = f"{username} - {time} - [στοιχεία μη διαθέσιμα]"
-            appointment_data.append((username, username, "Άγνωστο", time))
+            for username, time in appointments:
+                profile = get_user_profile(username)
+                if profile:
+                    name, phone = profile
+                    display = f"{name} ({username}) - {time} - Τηλ: {phone}"
+                    self.appointment_data.append((username, name, phone, time))
+                else:
+                    display = f"{username} - {time} - [στοιχεία μη διαθέσιμα]"
+                    self.appointment_data.append((username, username, "Άγνωστο", time))
+                self.list_widget.addItem(display)
 
-        listbox.insert(tk.END, display)
+        send_button = QPushButton("Αποστολή Υπενθύμισης")
+        send_button.setObjectName("Primary")
+        send_button.clicked.connect(self._send_reminder)
+        card.addWidget(send_button)
 
-    def send_reminder():
-        selection = listbox.curselection()
-        if not selection:
-            messagebox.showwarning("Προσοχή", "Δεν επιλέχθηκε ραντεβού.")
+    def _send_reminder(self) -> None:
+        index = self.list_widget.currentRow()
+        if index < 0:
+            QMessageBox.warning(self, "Προσοχή", "Δεν επιλέχθηκε ραντεβού.")
             return
 
-        index = selection[0]
-        username, name, phone, time = appointment_data[index]
+        username, name, phone, time = self.appointment_data[index]
+        QMessageBox.information(
+            self,
+            "Αποστολή Υπενθύμισης",
+            f"Η υπενθύμιση εστάλη επιτυχώς στον {name} ({username}) στο τηλέφωνο {phone} για τις {time}.",
+        )
 
-        # Εδώ θα εμφανιστεί το μήνυμα επιτυχίας
-        messagebox.showinfo("Αποστολή Υπενθύμισης", f"Η υπενθύμιση εστάλη επιτυχώς στον {name} ({username}) στο τηλέφωνο {phone} για τις {time}.")
 
-    tk.Button(window, text="Αποστολή Υπενθύμισης", command=send_reminder).pack(pady=10)
+class BarberMenuWindow(QWidget):
+    def __init__(self, on_logout: Callable[[], None] | None = None) -> None:
+        super().__init__()
+        self.on_logout = on_logout
+
+        center_window(self, 560, 420)
+        content = setup_frameless(self, "Μενού Κουρέα")
+        card = make_card_layout(content)
+
+        heading = QLabel("Barber Dashboard")
+        heading.setObjectName("Heading")
+        card.addWidget(heading)
+
+        subtitle = QLabel("Είσαι συνδεδεμένος ως κουρέας")
+        subtitle.setObjectName("Subtle")
+        card.addWidget(subtitle)
+
+        appt_button = QPushButton("Προβολή όλων των ραντεβού")
+        appt_button.setObjectName("Primary")
+        appt_button.clicked.connect(lambda: AppointmentsDialog(self).exec())
+
+        prices_button = QPushButton("Διαχείριση Τιμών")
+        prices_button.setObjectName("Secondary")
+        prices_button.clicked.connect(lambda: ManagePricesDialog(self).exec())
+
+        reminders_button = QPushButton("Υπενθυμίσεις Αύριο")
+        reminders_button.setObjectName("Secondary")
+        reminders_button.clicked.connect(lambda: RemindersDialog(self).exec())
+
+        logout_button = QPushButton("Logout")
+        logout_button.setObjectName("Danger")
+        logout_button.clicked.connect(self._logout)
+
+        card.addWidget(appt_button)
+        card.addWidget(prices_button)
+        card.addWidget(reminders_button)
+        card.addWidget(logout_button)
+
+    def _logout(self) -> None:
+        self.close()
+        if self.on_logout:
+            self.on_logout()
+
+
+def open_barber_menu(on_logout: Callable[[], None] | None = None) -> BarberMenuWindow:
+    return BarberMenuWindow(on_logout)

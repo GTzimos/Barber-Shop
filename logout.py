@@ -1,4 +1,9 @@
-# logout.py
+from __future__ import annotations
 
-def logout(current_window):
-    current_window.destroy()
+from typing import Callable
+
+
+def logout(current_window, on_logout: Callable[[], None] | None = None) -> None:
+    current_window.close()
+    if on_logout:
+        on_logout()

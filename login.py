@@ -1,39 +1,100 @@
-import tkinter as tk
-from tkinter import messagebox
-from users import verify_user, open_register_window
-from appointments_gui import AppointmentWindow
-from barber_menu import open_barber_menu
+from __future__ import annotations
 
-def open_login_window(on_success):
-    login_window = tk.Tk()
-    login_window.title("Login")
-    login_window.geometry("300x250")
+from typing import Callable
 
-    tk.Label(login_window, text="Username").pack()
-    username_entry = tk.Entry(login_window)
-    username_entry.pack()
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QWidget,
+)
 
-    tk.Label(login_window, text="Password").pack()
-    password_entry = tk.Entry(login_window, show="*")
-    password_entry.pack()
+from qt_ui import center_window, make_card_layout, setup_frameless
+from users import open_register_window, verify_user
 
-    def handle_login():
-        username = username_entry.get()
-        password = password_entry.get()
+
+class LoginWindow(QWidget):
+    def __init__(self, on_login_success: Callable[[str], None]) -> None:
+        super().__init__()
+        self.on_login_success = on_login_success
+
+        center_window(self, 500, 380)
+        content = setup_frameless(self, "Barber Hub")
+        card = make_card_layout(content)
+
+        heading = QLabel("Barber Shop")
+        heading.setObjectName("Heading")
+        card.addWidget(heading)
+
+        subtitle = QLabel("Κάνε σύνδεση για να διαχειριστείς το επόμενο ραντεβού σου.")
+        subtitle.setWordWrap(True)
+        subtitle.setObjectName("Subtle")
+        card.addWidget(subtitle)
+
+        form = QGridLayout()
+        form.setHorizontalSpacing(10)
+        form.setVerticalSpacing(8)
+
+        user_label = QLabel("Username")
+        user_label.setObjectName("Field")
+        self.username_input = QLineEdit()
+
+        pass_label = QLabel("Password")
+        pass_label.setObjectName("Field")
+        self.password_input = QLineEdit()
+        self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
+
+        form.addWidget(user_label, 0, 0)
+        form.addWidget(self.username_input, 1, 0)
+        form.addWidget(pass_label, 2, 0)
+        form.addWidget(self.password_input, 3, 0)
+        card.addLayout(form)
+
+        actions = QHBoxLayout()
+        login_button = QPushButton("Σύνδεση")
+        login_button.setObjectName("Primary")
+        login_button.clicked.connect(self._handle_login)
+
+        register_button = QPushButton("Εγγραφή")
+        register_button.setObjectName("Secondary")
+        register_button.clicked.connect(self._open_register)
+
+        actions.addWidget(login_button)
+        actions.addWidget(register_button)
+        card.addLayout(actions)
+
+        self.username_input.setFocus()
+
+    def _handle_login(self) -> None:
+        username = self.username_input.text().strip()
+        password = self.password_input.text().strip()
+
+        if not username or not password:
+            QMessageBox.warning(self, "Προσοχή", "Συμπλήρωσε username και password.")
+            return
 
         user = verify_user(username, password)
-        if user:
-            messagebox.showinfo("Επιτυχία", f"Καλώς ήρθες {username}!")
+        if not user:
+            QMessageBox.critical(self, "Σφάλμα", "Λάθος στοιχεία!")
+            return
 
-            def proceed():
-                login_window.destroy()
-                on_success(username)
+        QMessageBox.information(self, "Επιτυχία", f"Καλώς ήρθες {username}!")
+        self.close()
+        self.on_login_success(username)
 
-            login_window.after(100, proceed)
-        else:
-            messagebox.showerror("Σφάλμα", "Λάθος στοιχεία!")
+    def _open_register(self) -> None:
+        open_register_window(self)
 
-    tk.Button(login_window, text="Login", command=handle_login).pack(pady=10)
-    tk.Button(login_window, text="Εγγραφή", command=lambda: open_register_window(login_window)).pack(pady=10)
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self._handle_login()
+            return
+        super().keyPressEvent(event)
 
-    login_window.mainloop()
+
+def open_login_window(on_success: Callable[[str], None]) -> LoginWindow:
+    return LoginWindow(on_success)
